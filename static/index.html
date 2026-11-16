@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>混样组成录入平台</title>
+<title>混样组成与浓度还原平台</title>
 <style>
-  :root { --bd:#d0d7de; --bg:#f6f8fa; --red:#cf222e; --green:#1a7f37; --blue:#0969da; }
+  :root { --bd:#d0d7de; --bg:#f6f8fa; --red:#cf222e; --green:#1a7f37; --blue:#0969da; --purple:#8250df; --amber:#9a6700; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color:#1f2328; }
   header { background:#24292f; color:#fff; padding:14px 24px; }
   header h1 { margin:0; font-size:18px; }
   header p { margin:4px 0 0; font-size:12px; color:#c9d1d9; }
   main { max-width:1180px; margin:0 auto; padding:20px 24px 60px; }
-  .tabs { display:flex; gap:8px; margin-bottom:16px; }
+  .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
   .tabs button { padding:8px 18px; border:1px solid var(--bd); background:#fff; border-radius:6px; cursor:pointer; font-size:14px; }
   .tabs button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
   section.panel { display:none; }
@@ -37,24 +37,41 @@
   .result.info { background:#ddf4ff; border:1px solid var(--blue); }
   .viol { display:block; margin:3px 0; }
   .badge { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; font-weight:700; margin-right:6px; }
-  .badge.pool { background:#fff8c5; color:#9a6700; }
-  .badge.sample { background:#fbefff; color:#8250df; }
+  .badge.pool { background:#fff8c5; color:var(--amber); }
+  .badge.sample { background:#fbefff; color:var(--purple); }
   table { border-collapse:collapse; width:100%; font-size:13px; margin-bottom:18px; }
-  th, td { border:1px solid var(--bd); padding:7px 10px; text-align:left; }
+  th, td { border:1px solid var(--bd); padding:7px 10px; text-align:left; vertical-align:top; }
   th { background:var(--bg); }
   .muted { color:#57606a; font-size:12px; }
   .ok-text { color:var(--green); font-weight:600; }
   .bad-text { color:var(--red); font-weight:600; }
+  .frac { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-weight:700; }
+  .pill { display:inline-block; padding:2px 10px; border-radius:12px; font-size:12px; font-weight:700; }
+  .pill.unique { background:#dafbe1; color:var(--green); }
+  .pill.non_unique { background:#fff8c5; color:var(--amber); }
+  .pill.infeasible { background:#ffebe9; color:var(--red); }
+  .pill.failed { background:#ffebe9; color:var(--red); }
+  .pill.invalid { background:#ffebe9; color:var(--red); }
+  .pill.valid { background:#dafbe1; color:var(--green); }
+  .pool-pick { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--bd); border-radius:6px; margin-bottom:8px; background:#fff; }
+  .pool-pick.disabled { opacity:.55; background:var(--bg); }
+  .pool-pick label { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; min-width:120px; }
+  .pool-pick .meta { font-size:12px; color:#57606a; flex:1; }
+  .pool-pick input[type=text] { max-width:140px; }
+  details.audit { border:1px solid var(--bd); border-radius:6px; padding:8px 12px; margin-bottom:10px; background:#fff; }
+  details.audit summary { cursor:pointer; font-weight:600; font-size:13px; }
+  .sub { font-size:12px; color:#57606a; margin:2px 0 10px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>混样组成录入平台</h1>
-  <p>样本原量 / 混池总量 / 入池明细 · 按单录入与更正 · 每单至多 20 项 · 体积单位 μL（非负整数，明细用量为正）</p>
+  <h1>混样组成与浓度还原平台</h1>
+  <p>样本原量 / 混池总量 / 入池明细 · 按单录入更正 · 混池浓度精确还原（1–8 个非空混池、至多 8 个样本、非负有理数浓度、分数区间）</p>
 </header>
 <main>
   <div class="tabs">
     <button id="tab-entry" class="active" onclick="showTab('entry')">录入 / 更正</button>
+    <button id="tab-restore" onclick="showTab('restore')">浓度还原</button>
     <button id="tab-view" onclick="showTab('view')">组成查询</button>
   </div>
 
@@ -92,6 +109,41 @@
     <div id="entry-result"></div>
   </section>
 
+  <!-- ===================== 浓度还原面板 ===================== -->
+  <section id="panel-restore" class="panel">
+    <div class="card">
+      <h2>第 1 步 · 选择 1–8 个非空混池并录入浓度（非负有理数，如 3、0.25、2/3）</h2>
+      <p class="sub">测值绑定录入时该池的总量与明细；之后任一更正都会令该池测值需重新确认、相关旧结果永久失效（改回也不恢复），无关池不受影响。</p>
+      <div id="pool-picks"></div>
+      <div class="toolbar">
+        <button class="primary" onclick="submitRestore()">确认测值并计算</button>
+        <button class="secondary" onclick="loadRestorePage()">刷新混池/任务状态</button>
+        <span class="count" id="pick-count">已选 0 / 8 个非空混池</span>
+      </div>
+      <div id="restore-result"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>第 2 步 · 计算任务（失败不发布半份结果；迟到计算不发布过期结果）</h2>
+      <div id="jobs-area"><span class="muted">加载中…</span></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>第 3 步 · 供数（仅仍有效且已发布的完整结果，含当时组成、测值与分数区间）</h2>
+      <p class="sub">失效与失败结果不进入供数，但可在下方回查；唯一解才给确定值，非唯一只给可行上下界，绝不把任意拟合值当作还原值。</p>
+      <div id="results-area"><span class="muted">加载中…</span></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>回查 · 失效 / 失败结果留档（按结果号查询）</h2>
+      <div class="toolbar" style="margin:8px 0;">
+        <input type="number" id="audit-id" min="1" placeholder="结果 result_id" style="max-width:160px;">
+        <button class="secondary" onclick="auditResult()">回查</button>
+      </div>
+      <div id="audit-area"></div>
+    </div>
+  </section>
+
   <!-- ===================== 查询面板 ===================== -->
   <section id="panel-view" class="panel">
     <div class="toolbar">
@@ -104,6 +156,7 @@
 
 <script>
 const MAX_ITEMS = 20;
+const MAX_POOLS = 8;
 
 function rowHtml(kind) {
   const ops = ['insert', 'update', 'delete'];
@@ -183,11 +236,9 @@ async function submitOrder(dryRun) {
   const total = payload.samples.length + payload.pools.length + payload.details.length;
   if (total === 0) { showResult('err', '订单至少包含一项操作'); return; }
   if (total > MAX_ITEMS) { showResult('err', `每单至多 ${MAX_ITEMS} 项, 当前 ${total} 项`); return; }
-
   try {
     const resp = await fetch('/api/orders', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload)
     });
     const data = await resp.json();
@@ -206,12 +257,197 @@ async function submitOrder(dryRun) {
   }
 }
 
+// ============================ 浓度还原 ============================
+
+async function loadRestorePage() {
+  await loadPoolPicks();
+  await loadJobs();
+  await loadResults();
+}
+
+async function loadPoolPicks() {
+  const box = document.getElementById('pool-picks');
+  try {
+    const [comp, meas] = await Promise.all([
+      fetch('/api/composition').then(r => r.json()),
+      fetch('/api/restoration/measurements').then(r => r.json())
+    ]);
+    const confirmed = {};
+    (meas.measurements || []).forEach(m => {
+      if (m.status === 'confirmed') confirmed[m.pool_no] = m;
+    });
+    box.innerHTML = comp.pools.map(p => {
+      const empty = p.total_ul <= 0 || p.details.length === 0;
+      const det = p.details.map(d => `${d.sample_no}:${d.amount_ul}`).join(' + ');
+      const cm = confirmed[p.pool_no];
+      const concVal = cm ? cm.concentration : '';
+      const stateNote = empty
+        ? '<span class="bad-text">空池，不可选</span>'
+        : (cm ? `<span class="ok-text">已确认 c=<span class="frac">${cm.concentration}</span></span>`
+              : '<span class="muted">尚未确认测值</span>');
+      return `<div class="pool-pick ${empty ? 'disabled' : ''}">
+        <label><input type="checkbox" class="pick" data-pool="${p.pool_no}" ${empty ? 'disabled' : ''}>
+          ${p.pool_no}</label>
+        <input type="text" class="conc" data-pool="${p.pool_no}" placeholder="浓度 c"
+               value="${concVal}" ${empty ? 'disabled' : ''}>
+        <span class="meta">总量 ${p.total_ul} μL = ${det || '（空）'} &nbsp; ${stateNote}</span>
+      </div>`;
+    }).join('');
+    box.querySelectorAll('.pick').forEach(el => el.addEventListener('change', updatePickCount));
+    updatePickCount();
+  } catch (e) {
+    box.innerHTML = `<span class="bad-text">混池加载失败: ${e}</span>`;
+  }
+}
+
+function updatePickCount() {
+  const n = document.querySelectorAll('#pool-picks .pick:checked').length;
+  const el = document.getElementById('pick-count');
+  el.textContent = `已选 ${n} / ${MAX_POOLS} 个非空混池`;
+  el.className = 'count' + (n > MAX_POOLS || n < 1 ? ' over' : '');
+}
+
+function showRestoreResult(kind, text) {
+  document.getElementById('restore-result').innerHTML =
+    `<div class="result ${kind}">${text}</div>`;
+}
+
+async function submitRestore() {
+  const picks = [...document.querySelectorAll('#pool-picks .pick:checked')]
+    .map(el => el.dataset.pool);
+  if (picks.length < 1) { showRestoreResult('err', '请至少选择 1 个非空混池'); return; }
+  if (picks.length > MAX_POOLS) { showRestoreResult('err', `至多选择 ${MAX_POOLS} 个混池`); return; }
+  const measurements = [];
+  for (const pool of picks) {
+    const input = document.querySelector(`.conc[data-pool="${pool}"]`);
+    const concentration = input ? input.value.trim() : '';
+    if (!concentration) { showRestoreResult('err', `混池 ${pool} 的浓度不能为空`); return; }
+    measurements.push({ pool_no: pool, concentration });
+  }
+  showRestoreResult('info', '测值确认与计算任务提交中…');
+  try {
+    const resp = await fetch('/api/restoration/jobs', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ measurements })
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      showRestoreResult('err', `${data.message || '请求失败'} (HTTP ${resp.status})`);
+      return;
+    }
+    showRestoreResult('ok',
+      `任务 #${data.job_id} 已创建。正在后台精确计算，稍后在下方刷新查看结论。`);
+    setTimeout(loadRestorePage, 600);
+    setTimeout(loadRestorePage, 1800);
+  } catch (e) {
+    showRestoreResult('err', '网络或服务错误: ' + e);
+  }
+}
+
+async function loadJobs() {
+  const area = document.getElementById('jobs-area');
+  try {
+    const data = await fetch('/api/restoration/jobs?limit=20').then(r => r.json());
+    if (!data.jobs.length) { area.innerHTML = '<span class="muted">暂无任务</span>'; return; }
+    let html = '<table><tr><th>任务</th><th>状态</th><th>结果</th><th>说明</th><th>完成时间</th></tr>';
+    data.jobs.forEach(j => {
+      const cls = j.status === 'succeeded' ? 'valid' : (j.status === 'failed' ? 'failed' : 'non_unique');
+      html += `<tr><td>#${j.job_id}</td>
+        <td><span class="pill ${cls}">${j.status}</span></td>
+        <td>${j.result_id ? '#' + j.result_id : '—'}</td>
+        <td class="muted">${j.error_message || ''}</td>
+        <td class="muted">${j.finished_at || ''}</td></tr>`;
+    });
+    area.innerHTML = html + '</table>';
+  } catch (e) {
+    area.innerHTML = `<span class="bad-text">任务加载失败: ${e}</span>`;
+  }
+}
+
+function boundsTable(bounds) {
+  if (!bounds || !bounds.length) return '<span class="muted">（无区间）</span>';
+  let h = '<table><tr><th>样本</th><th>下界</th><th>上界</th><th>是否唯一</th></tr>';
+  bounds.forEach(b => {
+    h += `<tr><td>${b.sample_no}</td>
+      <td class="frac">${b.lower}</td>
+      <td class="frac">${b.upper}</td>
+      <td>${b.unique ? '<span class="ok-text">唯一确定</span>' : '<span class="bad-text">非唯一（区间）</span>'}</td></tr>`;
+  });
+  return h + '</table>';
+}
+
+function snapshotHtml(snap) {
+  if (!snap || !snap.pools) return '';
+  let h = '<table><tr><th>混池</th><th>总量 μL</th><th>浓度 c</th><th>当时明细</th></tr>';
+  snap.pools.forEach(p => {
+    const det = (p.details || []).map(d => `${d.sample_no}:${d.amount_ul}`).join(' + ');
+    h += `<tr><td>${p.pool_no}</td><td>${p.total_ul}</td>
+      <td class="frac">${p.concentration}</td><td>${det}</td></tr>`;
+  });
+  h += '</table><span class="muted">涉及样本：' + (snap.samples || []).join('、') + '</span>';
+  return h;
+}
+
+async function loadResults() {
+  const area = document.getElementById('results-area');
+  try {
+    const data = await fetch('/api/restoration/results').then(r => r.json());
+    if (!data.results.length) { area.innerHTML = '<span class="muted">当前无仍有效且已发布的完整结果（失效/失败结果不供数）。</span>'; return; }
+    area.innerHTML = data.results.map(r => `
+      <details class="audit" open>
+        <summary>结果 #${r.result_id}
+          <span class="pill ${r.status}">${statusText(r.status)}</span>
+          <span class="pill valid">有效</span>
+          <span class="muted">${r.pool_count} 池 / ${r.sample_count} 样本 · ${r.published_at || ''}</span>
+        </summary>
+        <h4 style="margin:10px 0 4px;font-size:13px;">可行上下界（分数）</h4>
+        ${boundsTable(r.bounds)}
+        <h4 style="margin:10px 0 4px;font-size:13px;">计算时组成与测值快照</h4>
+        ${snapshotHtml(r.snapshot)}
+      </details>`).join('');
+  } catch (e) {
+    area.innerHTML = `<span class="bad-text">结果加载失败: ${e}</span>`;
+  }
+}
+
+function statusText(s) {
+  return { unique: '唯一解', non_unique: '非唯一（区间）', infeasible: '无解', failed: '失败未发布' }[s] || s;
+}
+
+async function auditResult() {
+  const id = document.getElementById('audit-id').value.trim();
+  const area = document.getElementById('audit-area');
+  if (!id) { area.innerHTML = '<span class="bad-text">请输入结果号</span>'; return; }
+  try {
+    const resp = await fetch('/api/restoration/results/' + encodeURIComponent(id));
+    if (!resp.ok) { area.innerHTML = '<span class="bad-text">结果不存在</span>'; return; }
+    const r = await resp.json();
+    const validPill = r.valid ? '<span class="pill valid">有效</span>'
+                              : '<span class="pill invalid">已永久失效</span>';
+    area.innerHTML = `
+      <details class="audit" open>
+        <summary>结果 #${r.result_id} <span class="pill ${r.status}">${statusText(r.status)}</span>
+          ${validPill}
+          <span class="muted">published=${r.published}</span></summary>
+        <p class="muted" style="margin:8px 0;">失效原因：${r.invalid_reason || '（无）'} ·
+           失效时间：${r.invalidated_at || '（无）'} · 错误：${r.error_message || '（无）'}</p>
+        <h4 style="margin:8px 0 4px;font-size:13px;">可行上下界（分数）</h4>
+        ${boundsTable(r.bounds)}
+        <h4 style="margin:8px 0 4px;font-size:13px;">计算时组成与测值快照</h4>
+        ${snapshotHtml(r.snapshot)}
+      </details>`;
+  } catch (e) {
+    area.innerHTML = `<span class="bad-text">回查失败: ${e}</span>`;
+  }
+}
+
 function showTab(name) {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('panel-' + name).classList.add('active');
   if (name === 'view') loadComposition();
+  if (name === 'restore') loadRestorePage();
 }
 
 async function loadComposition() {
@@ -223,14 +459,14 @@ async function loadComposition() {
     let html = '<h2 style="font-size:15px;">样本原量与累计用量</h2><table><tr><th>样本号</th><th>原量 μL</th><th>累计用量 μL</th><th>剩余 μL</th><th>状态</th></tr>';
     data.samples.forEach(s => {
       const ok = s.used_ul <= s.amount_ul;
-      html += `<tr><td>${s.sample_no}</td><td>${s.amount_ul}</td><td>${s.used_ul}</td><td>${s.amount_ul - s.used_ul}</td>
+      html += `<tr><td>${s.sample_no}</td><td>${s.amount_ul}</td><td>${s.used_ul}</td><td>${s.amount_ul - s.used_ul}
         <td class="${ok ? 'ok-text' : 'bad-text'}">${ok ? '合法' : '超量'}</td></tr>`;
     });
     html += '</table><h2 style="font-size:15px;">混池总量与入池明细</h2><table><tr><th>混池号</th><th>总量 μL</th><th>明细合计 μL</th><th>状态</th><th>明细（样本: 用量 μL）</th></tr>';
     data.pools.forEach(p => {
       const ok = p.total_ul === p.detail_sum;
       const det = p.details.map(d => `${d.sample_no}: ${d.amount_ul}`).join('，') || '<span class="muted">（空池）</span>';
-      html += `<tr><td>${p.pool_no}</td><td>${p.total_ul}</td><td>${p.detail_sum}</td>
+      html += `<tr><td>${p.pool_no}</td><td>${p.total_ul}</td><td>${p.detail_sum}
         <td class="${ok ? 'ok-text' : 'bad-text'}">${ok ? '平衡' : '失衡'}</td><td>${det}</td></tr>`;
     });
     html += '</table>';

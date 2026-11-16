@@ -12,6 +12,8 @@ class Settings:
     pool_max_size: int = int(os.getenv("DB_POOL_MAX", "10"))
     # 死锁/序列化冲突时整单重试次数 (重试的是整个订单事务)
     max_retries: int = int(os.getenv("ORDER_MAX_RETRIES", "3"))
+    # 还原计算后台线程数 (每任务一次精确单纯形, 规模 ≤8×8, 单线程足够演示)
+    restore_workers: int = int(os.getenv("RESTORE_WORKERS", "2"))
 
 
 settings = Settings()
