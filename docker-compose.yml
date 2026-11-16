@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: lab-pool-db
+    environment:
+      POSTGRES_USER: lab
+      POSTGRES_PASSWORD: lab
+      POSTGRES_DB: labdb
+    ports:
+      # 暴露给宿主机, 便于用独立 SQL 连接 (READ COMMITTED) 直接验证规则
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 仅首次初始化 (数据目录为空) 时按文件名顺序自动执行
+      - ./db/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lab -d labdb"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build: .
+    container_name: lab-pool-web
+    environment:
+      DATABASE_URL: postgresql://lab:lab@db:5432/labdb
+      DB_POOL_MIN: "2"
+      DB_POOL_MAX: "10"
+      ORDER_MAX_RETRIES: "3"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

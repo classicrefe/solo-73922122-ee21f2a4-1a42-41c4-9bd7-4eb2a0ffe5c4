@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>混样组成录入平台</title>
+<style>
+  :root { --bd:#d0d7de; --bg:#f6f8fa; --red:#cf222e; --green:#1a7f37; --blue:#0969da; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color:#1f2328; }
+  header { background:#24292f; color:#fff; padding:14px 24px; }
+  header h1 { margin:0; font-size:18px; }
+  header p { margin:4px 0 0; font-size:12px; color:#c9d1d9; }
+  main { max-width:1180px; margin:0 auto; padding:20px 24px 60px; }
+  .tabs { display:flex; gap:8px; margin-bottom:16px; }
+  .tabs button { padding:8px 18px; border:1px solid var(--bd); background:#fff; border-radius:6px; cursor:pointer; font-size:14px; }
+  .tabs button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+  section.panel { display:none; }
+  section.panel.active { display:block; }
+  .grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .card { border:1px solid var(--bd); border-radius:8px; padding:14px; background:#fff; }
+  .card h2 { font-size:15px; margin:0 0 10px; }
+  .row { display:grid; grid-template-columns: 90px 1fr 110px 70px; gap:6px; margin-bottom:6px; align-items:center; }
+  .row.head { font-size:12px; color:#57606a; font-weight:600; }
+  input, select { padding:6px 8px; border:1px solid var(--bd); border-radius:6px; font-size:13px; width:100%; }
+  .row button { padding:6px 0; border:1px solid var(--bd); background:var(--bg); border-radius:6px; cursor:pointer; font-size:12px; }
+  .add { margin-top:6px; width:100%; padding:7px; border:1px dashed var(--bd); background:#fff; border-radius:6px; cursor:pointer; color:var(--blue); }
+  .toolbar { display:flex; gap:10px; align-items:center; margin:18px 0; flex-wrap:wrap; }
+  .toolbar .count { font-size:13px; color:#57606a; }
+  .toolbar .count.over { color:var(--red); font-weight:700; }
+  .toolbar label { font-size:13px; display:flex; align-items:center; gap:4px; }
+  .primary { background:var(--blue); color:#fff; border:none; padding:9px 22px; border-radius:6px; cursor:pointer; font-size:14px; }
+  .secondary { background:#fff; border:1px solid var(--bd); padding:9px 18px; border-radius:6px; cursor:pointer; font-size:14px; }
+  .result { border-radius:8px; padding:12px 14px; margin-top:14px; font-size:13px; white-space:pre-wrap; }
+  .result.ok { background:#dafbe1; border:1px solid var(--green); }
+  .result.err { background:#ffebe9; border:1px solid var(--red); }
+  .result.info { background:#ddf4ff; border:1px solid var(--blue); }
+  .viol { display:block; margin:3px 0; }
+  .badge { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; font-weight:700; margin-right:6px; }
+  .badge.pool { background:#fff8c5; color:#9a6700; }
+  .badge.sample { background:#fbefff; color:#8250df; }
+  table { border-collapse:collapse; width:100%; font-size:13px; margin-bottom:18px; }
+  th, td { border:1px solid var(--bd); padding:7px 10px; text-align:left; }
+  th { background:var(--bg); }
+  .muted { color:#57606a; font-size:12px; }
+  .ok-text { color:var(--green); font-weight:600; }
+  .bad-text { color:var(--red); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>混样组成录入平台</h1>
+  <p>样本原量 / 混池总量 / 入池明细 · 按单录入与更正 · 每单至多 20 项 · 体积单位 μL（非负整数，明细用量为正）</p>
+</header>
+<main>
+  <div class="tabs">
+    <button id="tab-entry" class="active" onclick="showTab('entry')">录入 / 更正</button>
+    <button id="tab-view" onclick="showTab('view')">组成查询</button>
+  </div>
+
+  <!-- ===================== 录入面板 ===================== -->
+  <section id="panel-entry" class="panel active">
+    <div class="grid">
+      <div class="card">
+        <h2>样本原量</h2>
+        <div class="row head"><span>操作</span><span>样本号</span><span>原量 μL</span><span></span></div>
+        <div id="sample-rows"></div>
+        <button class="add" onclick="addRow('samples')">+ 添加样本项</button>
+      </div>
+      <div class="card">
+        <h2>混池总量</h2>
+        <div class="row head"><span>操作</span><span>混池号</span><span>总量 μL</span><span></span></div>
+        <div id="pool-rows"></div>
+        <button class="add" onclick="addRow('pools')">+ 添加混池项</button>
+      </div>
+      <div class="card">
+        <h2>入池明细</h2>
+        <div class="row head" style="grid-template-columns:70px 1fr 1fr 80px 56px;">
+          <span>操作</span><span>样本号</span><span>混池号</span><span>用量 μL</span><span></span>
+        </div>
+        <div id="detail-rows"></div>
+        <button class="add" onclick="addRow('details')">+ 添加明细项</button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" onclick="submitOrder(false)">提交订单</button>
+      <button class="secondary" onclick="submitOrder(true)">试运行（只校验不提交）</button>
+      <label><input type="checkbox" id="reload-after" checked> 提交后自动刷新组成</label>
+      <span class="count" id="item-count">共 0 / 20 项</span>
+    </div>
+    <div id="entry-result"></div>
+  </section>
+
+  <!-- ===================== 查询面板 ===================== -->
+  <section id="panel-view" class="panel">
+    <div class="toolbar">
+      <button class="secondary" onclick="loadComposition()">刷新</button>
+      <span class="muted">数据来自单一只读事务的同一已提交快照</span>
+    </div>
+    <div id="view-area"></div>
+  </section>
+</main>
+
+<script>
+const MAX_ITEMS = 20;
+
+function rowHtml(kind) {
+  const ops = ['insert', 'update', 'delete'];
+  if (kind === 'details') {
+    return `<div class="row" style="grid-template-columns:70px 1fr 1fr 80px 56px;">
+      <select data-f="op">${ops.map(o=>`<option>${o}</option>`).join('')}</select>
+      <input data-f="sample_no" placeholder="如 S001">
+      <input data-f="pool_no" placeholder="如 P001">
+      <input data-f="amount_ul" type="number" min="1" step="1" placeholder="正整数">
+      <button onclick="this.closest('.row').remove(); updateCount();">删除</button>
+    </div>`;
+  }
+  const noField = kind === 'samples' ? 'sample_no' : 'pool_no';
+  const volField = kind === 'samples' ? 'amount_ul' : 'total_ul';
+  const label = kind === 'samples' ? '原量' : '总量';
+  return `<div class="row">
+    <select data-f="op">${ops.map(o=>`<option>${o}</option>`).join('')}</select>
+    <input data-f="${noField}" placeholder="编号">
+    <input data-f="${volField}" type="number" min="0" step="1" placeholder="非负整数">
+    <button onclick="this.closest('.row').remove(); updateCount();">删除</button>
+  </div>`;
+}
+
+function addRow(kind) {
+  const box = document.getElementById(kind === 'samples' ? 'sample-rows'
+        : kind === 'pools' ? 'pool-rows' : 'detail-rows');
+  box.insertAdjacentHTML('beforeend', rowHtml(kind));
+  updateCount();
+}
+
+function collect(kind, boxId) {
+  return [...document.getElementById(boxId).querySelectorAll('.row')].map(r => {
+    const obj = {};
+    r.querySelectorAll('[data-f]').forEach(el => { obj[el.dataset.f] = el.value.trim(); });
+    return obj;
+  });
+}
+
+function updateCount() {
+  const n = document.querySelectorAll('#sample-rows .row').length
+          + document.querySelectorAll('#pool-rows .row').length
+          + document.querySelectorAll('#detail-rows .row').length;
+  const el = document.getElementById('item-count');
+  el.textContent = `共 ${n} / ${MAX_ITEMS} 项`;
+  el.className = 'count' + (n > MAX_ITEMS ? ' over' : '');
+}
+
+function buildPayload(dryRun) {
+  const numOrNull = v => v === '' ? null : Number(v);
+  const samples = collect('samples', 'sample-rows').map(x => ({
+    op: x.op, sample_no: x.sample_no, amount_ul: numOrNull(x.amount_ul)
+  }));
+  const pools = collect('pools', 'pool-rows').map(x => ({
+    op: x.op, pool_no: x.pool_no, total_ul: numOrNull(x.total_ul)
+  }));
+  const details = collect('details', 'detail-rows').map(x => ({
+    op: x.op, sample_no: x.sample_no, pool_no: x.pool_no, amount_ul: numOrNull(x.amount_ul)
+  }));
+  return { samples, pools, details, dry_run: dryRun };
+}
+
+function showResult(kind, text, violations) {
+  const box = document.getElementById('entry-result');
+  let html = `<div class="result ${kind}">${text}`;
+  if (violations && violations.length) {
+    html += violations.map(v => {
+      const cls = v.object_kind === 'pool' ? 'pool' : 'sample';
+      return `<span class="viol"><span class="badge ${cls}">${v.object_kind === 'pool' ? '混池' : '样本'} ${v.object}</span>${v.message}</span>`;
+    }).join('');
+  }
+  html += '</div>';
+  box.innerHTML = html;
+}
+
+async function submitOrder(dryRun) {
+  const payload = buildPayload(dryRun);
+  const total = payload.samples.length + payload.pools.length + payload.details.length;
+  if (total === 0) { showResult('err', '订单至少包含一项操作'); return; }
+  if (total > MAX_ITEMS) { showResult('err', `每单至多 ${MAX_ITEMS} 项, 当前 ${total} 项`); return; }
+
+  try {
+    const resp = await fetch('/api/orders', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      showResult('ok', dryRun ? '试运行通过：数据合法，未提交。' : '提交成功：订单已整体提交。', []);
+      if (!dryRun && document.getElementById('reload-after').checked) {
+        showTab('view'); loadComposition();
+      }
+    } else if (data.violations && data.violations.length) {
+      showResult('err', (data.message || '校验未通过，整单已回滚。') + ' 违规对象如下：', data.violations);
+    } else {
+      showResult('err', `${data.message || '请求失败'} (HTTP ${resp.status})`);
+    }
+  } catch (e) {
+    showResult('err', '网络或服务错误: ' + e);
+  }
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'view') loadComposition();
+}
+
+async function loadComposition() {
+  const area = document.getElementById('view-area');
+  area.innerHTML = '<span class="muted">加载中…</span>';
+  try {
+    const resp = await fetch('/api/composition');
+    const data = await resp.json();
+    let html = '<h2 style="font-size:15px;">样本原量与累计用量</h2><table><tr><th>样本号</th><th>原量 μL</th><th>累计用量 μL</th><th>剩余 μL</th><th>状态</th></tr>';
+    data.samples.forEach(s => {
+      const ok = s.used_ul <= s.amount_ul;
+      html += `<tr><td>${s.sample_no}</td><td>${s.amount_ul}</td><td>${s.used_ul}</td><td>${s.amount_ul - s.used_ul}</td>
+        <td class="${ok ? 'ok-text' : 'bad-text'}">${ok ? '合法' : '超量'}</td></tr>`;
+    });
+    html += '</table><h2 style="font-size:15px;">混池总量与入池明细</h2><table><tr><th>混池号</th><th>总量 μL</th><th>明细合计 μL</th><th>状态</th><th>明细（样本: 用量 μL）</th></tr>';
+    data.pools.forEach(p => {
+      const ok = p.total_ul === p.detail_sum;
+      const det = p.details.map(d => `${d.sample_no}: ${d.amount_ul}`).join('，') || '<span class="muted">（空池）</span>';
+      html += `<tr><td>${p.pool_no}</td><td>${p.total_ul}</td><td>${p.detail_sum}</td>
+        <td class="${ok ? 'ok-text' : 'bad-text'}">${ok ? '平衡' : '失衡'}</td><td>${det}</td></tr>`;
+    });
+    html += '</table>';
+    area.innerHTML = html;
+  } catch (e) {
+    area.innerHTML = `<span class="bad-text">加载失败: ${e}</span>`;
+  }
+}
+
+// 初始给一行空白, 方便录入
+addRow('samples'); addRow('pools'); addRow('details');
+</script>
+</body>
+</html>
